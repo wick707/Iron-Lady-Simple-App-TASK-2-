@@ -146,26 +146,6 @@ Describe your background and goals
 
 Receive tailored program recommendations
 
-🏗️ Project Structure
-text
-iron-lady-course-management/
-├── accounts/                    # User authentication app
-│   ├── templates/accounts/      # Login/signup templates
-│   ├── views.py                # Authentication views
-│   └── urls.py                 # Auth URL patterns
-├── courses/                     # Course management app
-│   ├── templates/courses/       # Course templates
-│   ├── models.py               # Course model
-│   ├── views.py                # CRUD views
-│   ├── forms.py                # Course forms
-│   └── urls.py                 # Course URL patterns
-├── iron_lady_project/          # Django project settings
-├── app.py                      # FastAPI chatbot server
-├── chatbot.html               # Chatbot interface
-├── knowledgebase.md           # Auto-generated course data
-├── requirements.txt           # Python dependencies
-├── manage.py                  # Django management script
-└── .env                       # Environment variables
 🎯 Core Models
 Course Model
 python
