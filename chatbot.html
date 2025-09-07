@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iron Lady Chatbot</title>
+    <style>
+        :root {
+            --primary-color: #c00000;
+            --secondary-color: #f4f4f4;
+            --user-bubble-color: #007bff;
+            --bot-bubble-color: #e9ecef;
+            --text-color: #333;
+            --text-color-light: #ffffff;
+        }
+
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: var(--secondary-color);
+        }
+
+        #chat-container {
+            width: 100%;
+            height: 100%;
+            background-color: white;
+            border-radius: 10px; 
+            overflow: hidden;
+            
+            /* --- THIS IS THE FIX --- */
+            /* Switched to CSS Grid for explicit row sizing */
+            display: grid;
+            grid-template-rows: auto 1fr auto; /* Header (auto), Chat Window (fills space), Input (auto) */
+        }
+
+        #chat-header {
+            background-color: var(--primary-color);
+            color: var(--text-color-light);
+            padding: 15px;
+            text-align: center;
+            font-size: 1.1rem;
+            font-weight: bold;
+        }
+
+        #chat-window {
+            padding: 15px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .message {
+            display: flex;
+            flex-direction: column;
+            max-width: 85%;
+        }
+
+        .message-bubble {
+            padding: 10px 15px;
+            border-radius: 18px;
+            line-height: 1.4;
+            word-wrap: break-word;
+        }
+
+        .user-message {
+            align-self: flex-end;
+        }
+
+        .user-message .message-bubble {
+            background-color: var(--user-bubble-color);
+            color: var(--text-color-light);
+            border-bottom-right-radius: 4px;
+        }
+
+        .bot-message {
+            align-self: flex-start;
+        }
+
+        .bot-message .message-bubble {
+            background-color: var(--bot-bubble-color);
+            color: var(--text-color);
+            border-bottom-left-radius: 4px;
+        }
+        
+        .message-footer {
+            display: flex;
+            align-items: center;
+            margin-top: 4px;
+        }
+
+        .speak-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            opacity: 0.6;
+            margin-left: 8px;
+        }
+
+        #input-area {
+            display: flex;
+            border-top: 1px solid #ddd;
+            padding: 12px;
+        }
+
+        #message-input {
+            flex-grow: 1;
+            border: 1px solid #ccc;
+            border-radius: 20px;
+            padding: 10px 15px;
+            font-size: 0.95rem;
+            margin-right: 8px;
+        }
+
+        #mic-button, #send-button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            cursor: pointer;
+            font-size: 18px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-left: 5px;
+            transition: background-color 0.3s;
+            flex-shrink: 0;
+        }
+        
+        #mic-button.recording {
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(192, 0, 0, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(192, 0, 0, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(192, 0, 0, 0); }
+        }
+
+        #typing-indicator {
+            align-self: flex-start;
+            color: #888;
+            font-style: italic;
+            font-size: 0.9rem;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="chat-container">
+        <div id="chat-header">Iron Lady FAQ Bot</div>
+        <div id="chat-window">
+            <!-- Welcome message will be added dynamically -->
+            <div id="typing-indicator">Bot is typing...</div>
+        </div>
+        <form id="input-area">
+            <input type="text" id="message-input" placeholder="Type your question..." autocomplete="off">
+            <button type="button" id="mic-button" title="Ask with voice">🎤</button>
+            <button type="submit" id="send-button" title="Send message">➤</button>
+        </form>
+    </div>
+
+    <script>
+        // DOM Elements
+        const chatWindow = document.getElementById('chat-window');
+        const messageForm = document.getElementById('input-area');
+        const messageInput = document.getElementById('message-input');
+        const micButton = document.getElementById('mic-button');
+        const typingIndicator = document.getElementById('typing-indicator');
+
+        // Chat history state
+        let chatHistory = [];
+        let chatMode = 'faq'; // Default mode
+
+        // --- Determine Chat Mode and Set Welcome Message ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            chatMode = urlParams.get('mode') || 'faq'; // Get mode from URL
+            
+            let welcomeMessage = "Hi! Ask me about Iron Lady's programs, durations, mode, certificates, or mentors.";
+            if (chatMode === 'recommend') {
+                welcomeMessage = "Welcome! To help me recommend the best course, please tell me about your career goals or interests (e.g., 'I am a software developer' or 'I want to join a company board').";
+            }
+            appendMessage(welcomeMessage, 'bot-message');
+        });
+
+        // --- Speech Recognition (STT) Setup ---
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition = null;
+
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.lang = 'en-US';
+
+            micButton.addEventListener('click', () => {
+                try {
+                    recognition.start();
+                    micButton.classList.add('recording');
+                    micButton.title = "Listening...";
+                } catch (error) {
+                    console.error("Speech recognition error on start:", error);
+                }
+            });
+
+            recognition.onresult = (event) => {
+                messageInput.value = event.results[0][0].transcript;
+                messageForm.dispatchEvent(new Event('submit'));
+            };
+
+            recognition.onend = () => {
+                micButton.classList.remove('recording');
+                micButton.title = "Ask with voice";
+            };
+
+            recognition.onerror = (event) => {
+                console.error("Speech recognition error:", event.error);
+                micButton.classList.remove('recording');
+            };
+        } else {
+            micButton.style.display = 'none';
+        }
+
+        // --- Handle Form Submission ---
+        messageForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const messageText = messageInput.value.trim();
+            if (messageText === "") return;
+
+            appendMessage(messageText, 'user-message');
+            messageInput.value = "";
+            chatHistory.push({ role: "user", content: messageText });
+            typingIndicator.style.display = 'block';
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: messageText,
+                        history: chatHistory.slice(0, -1),
+                        mode: chatMode // Send the current mode to the backend
+                    })
+                });
+
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+                const data = await response.json();
+                chatHistory.push({ role: "assistant", content: data.answer });
+                appendMessage(data.answer, 'bot-message');
+
+            } catch (error) {
+                console.error('Error fetching chat response:', error);
+                appendMessage('Sorry, I encountered an error. Please try again.', 'bot-message error');
+            } finally {
+                typingIndicator.style.display = 'none';
+                chatWindow.scrollTop = chatWindow.scrollHeight;
+            }
+        });
+
+        function appendMessage(text, className) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message', className);
+            const bubble = document.createElement('div');
+            bubble.classList.add('message-bubble');
+            bubble.innerHTML = text.replace(/\n/g, '<br>');
+            messageDiv.appendChild(bubble);
+
+            if (className === 'bot-message') {
+                const footer = document.createElement('div');
+                footer.classList.add('message-footer');
+                const speakButton = document.createElement('button');
+                speakButton.className = 'speak-btn';
+                speakButton.innerHTML = '🔊';
+                speakButton.onclick = () => speakText(text);
+                footer.appendChild(speakButton);
+                messageDiv.appendChild(footer);
+            }
+            chatWindow.insertBefore(messageDiv, typingIndicator);
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+        }
+
+        function speakText(text) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'en-US';
+                window.speechSynthesis.speak(utterance);
+            } else {
+                alert("Sorry, your browser doesn't support text-to-speech.");
+            }
+        }
+    </script>
+</body>
+</html>
+
